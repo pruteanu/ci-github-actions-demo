@@ -1,0 +1,33 @@
+name: CI Basic
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  test_pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Docker compose web app
+        run: docker-compose -f docker-compose.yml up -d
+      - name: Downloading Arachni archive
+        uses: wei/wget@v1
+        with:
+          args: https://github.com/Arachni/arachni/releases/download/v1.6.1.1/arachni-1.6.1.1-0.6.1.1-linux-x86_64.tar.gz
+      - name: Scanning localhost-deployed web app with Arachni
+        run: |
+              tar -xvf arachni-1.6.1.1-0.6.1.1-linux-x86_64.tar.gz > /dev/null
+              cd arachni-1.6.1.1-0.6.1.1/
+              CURR_HOSTNAME=$(cat /etc/hostname)
+              mkdir "./reports"
+              ./bin/arachni http://${CURR_HOSTNAME}:8080/courses/1/review  --checks 'xss*' --report-save-path './reports' 2>&1 > ./reports/arachni_scan_stdout_stderr.txt
+              scan_status=$(grep -oP "With issues: ([0-9]*)" ./reports/arachni_scan_stdout_stderr.txt | cut -d: -f2 | xargs)
+              grep -A1 -B1 "Without issues" ./reports/arachni_scan_stdout_stderr.txt
+              echo "Based on the above summarised output of the arachni scan, the identified status is: '$scan_status'! For more details, please open the .txt file in the job artefacts..."
+              exit $scan_status
+      - name: Archive report artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: arachni localhost
+          path: arachni-1.6.1.1-0.6.1.1/reports
+
